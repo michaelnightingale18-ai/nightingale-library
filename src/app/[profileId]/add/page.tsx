@@ -73,6 +73,7 @@ export default function AddBookPage() {
 
   // ── Series ──
   const [seriesQuery, setSeriesQuery] = useState("");
+  const [authorMode, setAuthorMode] = useState(false); // true when searching by author name
   const [suggestions, setSuggestions] = useState<SeriesSuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [chosenSeries, setChosenSeries] = useState<SeriesSuggestion | null>(null);
@@ -137,6 +138,7 @@ export default function AddBookPage() {
     const author = searchParams.get("author");
     if (author) {
       setMode("series");
+      setAuthorMode(true);
       setSeriesQuery(author);
     }
   }, [searchParams]);
@@ -148,11 +150,15 @@ export default function AddBookPage() {
     seriesDebounce.current = setTimeout(async () => {
       setSuggestionsLoading(true);
       try {
-        const res = await fetch(`/api/series/search?q=${encodeURIComponent(seriesQuery.trim())}`);
+        // Use inauthor: operator when in author mode so GB filters by author specifically
+        const apiQuery = authorMode
+          ? `inauthor:"${seriesQuery.trim()}"`
+          : seriesQuery.trim();
+        const res = await fetch(`/api/series/search?q=${encodeURIComponent(apiQuery)}`);
         setSuggestions((await res.json()).series || []);
       } finally { setSuggestionsLoading(false); }
     }, 400);
-  }, [seriesQuery]);
+  }, [seriesQuery, authorMode]);
 
   async function selectSeries(s: SeriesSuggestion) {
     setChosenSeries(s);
@@ -221,10 +227,15 @@ export default function AddBookPage() {
           {/* Series search input */}
           {!chosenSeries && (
             <div className="space-y-3">
+              {authorMode && seriesQuery && (
+                <p className="text-xs font-bold px-1" style={{ color: "#F3C75B" }}>
+                  Searching books by "{seriesQuery}" — tap any series to add it
+                </p>
+              )}
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-400" size={22} />
                 <input type="text" placeholder="Search for a series… e.g. Dragon Masters"
-                  value={seriesQuery} onChange={(e) => setSeriesQuery(e.target.value)}
+                  value={seriesQuery} onChange={(e) => { setSeriesQuery(e.target.value); setAuthorMode(false); }}
                   className="w-full pl-12 pr-4 py-4 rounded-2xl text-white/90 placeholder:text-white/25 text-lg font-medium outline-none"
                   style={{ background: "rgba(255,255,255,0.07)", border: `2px solid ${seriesQuery ? color : "rgba(255,255,255,0.08)"}` }}
                   autoFocus />
