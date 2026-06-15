@@ -446,6 +446,18 @@ export default function BookshelfPage() {
                   <p className="text-white/30 text-xs font-medium mt-2">
                     {selectedBook.liked ? "✓ Read" : "Not read yet"}
                   </p>
+                  <Link
+                    href={`/${profileId}/add?author=${encodeURIComponent(selectedBook.author)}`}
+                    className="inline-flex items-center gap-1 mt-3 text-xs font-bold px-3 py-1.5 rounded-full transition-all active:scale-95"
+                    style={{
+                      background: "rgba(243,199,91,0.10)",
+                      border: "1px solid rgba(243,199,91,0.30)",
+                      color: "#F3C75B",
+                    }}
+                    onClick={() => setSelectedBook(null)}
+                  >
+                    More by {selectedBook.author} →
+                  </Link>
                 </div>
               </div>
 

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { Search, CheckCircle, Book, BookOpen, Layers, ChevronRight } from "lucide-react";
@@ -54,6 +54,7 @@ async function upsertBook(b: Omit<BookSearchResult, "description" | "open_librar
 export default function AddBookPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const profileId = params.profileId as string;
   const { currentProfile } = useStore();
   const color = currentProfile?.color || "#f59e0b";
@@ -130,6 +131,15 @@ export default function AddBookPage() {
     setFullSeriesDone(true);
     setTimeout(() => router.push(`/${profileId}`), 1200);
   }
+
+  // ── Pre-fill from ?author= param (coming from "More by Author" on shelf) ──
+  useEffect(() => {
+    const author = searchParams.get("author");
+    if (author) {
+      setMode("series");
+      setSeriesQuery(author);
+    }
+  }, [searchParams]);
 
   // ── Series search as you type ──
   useEffect(() => {
