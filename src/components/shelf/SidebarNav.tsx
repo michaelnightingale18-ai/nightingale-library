@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Home, BookOpen, Plus, Star, Bell, Settings } from "lucide-react";
 import { NavRail } from "@/components/ui/NavRail";
 import type { Profile } from "@/lib/types";
@@ -23,20 +24,21 @@ export function SidebarNav({ profileId, profile }: Props) {
       items={items}
       activeColor="#F3C75B"
       header={
-        <div className="flex flex-col items-center gap-1 px-2">
+        <Link href="/" className="flex flex-col items-center gap-1 px-2 group">
           <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shadow-lg"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shadow-lg transition-all duration-200 group-hover:scale-110 group-active:scale-95"
             style={{
               background: `linear-gradient(135deg, ${profile.color}55, ${profile.color}22)`,
-              border:     `1.5px solid ${profile.color}44`,
+              border:     `1.5px solid ${profile.color}66`,
+              boxShadow:  `0 0 0 0 ${profile.color}00`,
             }}
           >
             {profile.avatar}
           </div>
-          <span className="text-[9px] text-white/25 font-bold truncate max-w-[60px] text-center">
+          <span className="text-[9px] text-white/30 font-bold truncate max-w-[60px] text-center group-hover:text-white/50 transition-colors">
             {profile.name}
           </span>
-        </div>
+        </Link>
       }
     />
   );
