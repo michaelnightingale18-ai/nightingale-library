@@ -1,0 +1,196 @@
+@import "tailwindcss";
+
+@theme {
+  --font-fredoka: var(--font-fredoka);
+  --font-nunito: var(--font-nunito);
+}
+
+:root {
+  --shelf-color: #8b5e3c;
+  --shelf-highlight: #c8a26b;
+  --shelf-shadow: #4a2810;
+  --profile-color: #6bcfff;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-nunito), "Nunito", sans-serif;
+  background: #17110B;
+  overscroll-behavior: none;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-fredoka), "Fredoka One", cursive;
+}
+
+/* ─── Scrollbar hide ──────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── Dark wood library background ───────────── */
+.wood-bg {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% 0%, #2B160B 0%, transparent 60%),
+    radial-gradient(ellipse 80% 40% at 20% 100%, #1a0d05 0%, transparent 50%),
+    radial-gradient(ellipse 80% 40% at 80% 100%, #1a0d05 0%, transparent 50%),
+    linear-gradient(180deg, #17110B 0%, #120900 60%, #0A0500 100%);
+}
+
+/* ─── Bookshelf plank (dark) ──────────────────── */
+.shelf-plank-dark {
+  height: 24px;
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    #C8924A 0%,
+    #A0702E 8%,
+    #7B5020 25%,
+    #5A3A14 55%,
+    #3D2410 80%,
+    #2C1A08 100%
+  );
+  border-radius: 2px 2px 4px 4px;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.95),
+    0 3px 8px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 200, 100, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.shelf-plank-dark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 48px,
+    rgba(0, 0, 0, 0.06) 48px,
+    rgba(0, 0, 0, 0.06) 49px
+  );
+  border-radius: 2px 2px 4px 4px;
+}
+
+/* ─── Animations ──────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes pop-in {
+  0%   { transform: scale(0.5) rotate(-8deg); opacity: 0; }
+  70%  { transform: scale(1.08) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes star-burst {
+  0%   { transform: scale(0) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1.5) rotate(180deg); opacity: 0; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes bounce-in {
+  0%   { transform: scale(0.3) translateY(60px); opacity: 0; }
+  50%  { transform: scale(1.05) translateY(-10px); opacity: 1; }
+  70%  { transform: scale(0.95) translateY(4px); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50%       { transform: rotate(3deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.6); }
+  50%       { box-shadow: 0 0 0 16px rgba(255, 215, 0, 0); }
+}
+
+@keyframes reading-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 18px rgba(255, 200, 50, 0.5),
+      0 0 40px rgba(255, 180, 0, 0.2),
+      0 12px 32px rgba(0, 0, 0, 0.9);
+  }
+  50% {
+    box-shadow:
+      0 0 32px rgba(255, 210, 60, 0.75),
+      0 0 60px rgba(255, 180, 0, 0.35),
+      0 12px 36px rgba(0, 0, 0, 0.95);
+  }
+}
+
+@keyframes gold-sweep {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes series-card-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.7; }
+}
+
+.animate-float     { animation: float 3s ease-in-out infinite; }
+.animate-pop-in    { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.animate-bounce-in { animation: bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.animate-wiggle    { animation: wiggle 0.5s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 1.5s ease-out infinite; }
+
+/* ─── Book: reading glow pulse ────────────────── */
+.book-reading-glow {
+  animation: reading-glow-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Book: completed gold shimmer ───────────── */
+.book-gold-shimmer {
+  background: linear-gradient(
+    108deg,
+    transparent 30%,
+    rgba(255, 220, 80, 0.22) 48%,
+    rgba(255, 255, 180, 0.18) 52%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: gold-sweep 2.8s linear infinite;
+}
+
+/* ─── Treehouse card shimmer ──────────────────── */
+.treehouse-card-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 180, 0, 0.05) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 5s linear infinite;
+}
+
+/* ─── Series title card inner glow ───────────── */
+.series-card-glow {
+  animation: series-card-pulse 3s ease-in-out infinite;
+}
+
+/* ─── Bottom nav safe area ────────────────────── */
+.bottom-nav {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+/* ─── Profile cards ───────────────────────────── */
+.profile-card { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.profile-card:active { transform: scale(0.95); }
+
+/* ─── Loading shimmer ─────────────────────────── */
+.shimmer {
+  background: linear-gradient(90deg, #1a1006 0%, #2a1a0a 50%, #1a1006 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
