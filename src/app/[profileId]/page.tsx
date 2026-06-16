@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles, BookOpen } from "lucide-react";
+import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles, BookOpen, Lock, Trophy } from "lucide-react";
 import {
   DndContext, DragOverlay, closestCenter,
   PointerSensor, useSensor, useSensors,
@@ -14,6 +14,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { groupBySeries } from "@/lib/books";
+import { levelFor, BOOKS_PER_LEVEL } from "@/lib/theme";
 import { Book } from "@/components/ui/Book";
 import { SeriesShelfRow, stateOf } from "@/components/shelf/SeriesShelfRow";
 import { TreehouseProgressCard } from "@/components/shelf/TreehouseProgressCard";
@@ -23,7 +24,7 @@ import type { BookWithRecord, SeriesGroup, ReleaseAlert } from "@/lib/types";
 export default function BookshelfPage() {
   const params = useParams();
   const profileId = params.profileId as string;
-  const { currentProfile, showCelebration } = useStore();
+  const { currentProfile, setCurrentProfile, showCelebration } = useStore();
   const color = currentProfile?.color || "#f59e0b";
 
   const [groups, setGroups] = useState<SeriesGroup[]>([]);
@@ -38,6 +39,13 @@ export default function BookshelfPage() {
   const [newSeriesModal, setNewSeriesModal] = useState<{ bookIdA: string; bookIdB: string; value: string } | null>(null);
   const [undoToast, setUndoToast] = useState<{ message: string; revert: () => Promise<void> } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Level-up approval state
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [levelUpPin, setLevelUpPin] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [justApprovedLevel, setJustApprovedLevel] = useState<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -376,6 +384,41 @@ export default function BookshelfPage() {
   const totalRead = groups.reduce((s, g) => s + g.books.filter((b) => b.liked).length, 0);
   const totalBooks = groups.reduce((s, g) => s + g.books.length, 0);
 
+  const approvedLevel = currentProfile?.approved_level ?? 1;
+  const eligibleLevel = levelFor(totalRead).level;
+  const levelUpPending = eligibleLevel > approvedLevel;
+  const qualifyingBooks = groups
+    .flatMap((g) => g.books)
+    .filter((b) => b.liked)
+    .sort((a, b) => new Date(b.read_at).getTime() - new Date(a.read_at).getTime())
+    .slice(0, Math.max(1, (eligibleLevel - approvedLevel) * BOOKS_PER_LEVEL));
+
+  async function approveLevel() {
+    if (!currentProfile) return;
+    setApproving(true);
+    setApproveError(null);
+    try {
+      const res = await fetch("/api/profile/approve-level", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId: currentProfile.id, pin: levelUpPin }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setApproveError(json.error || "Something went wrong");
+        return;
+      }
+      setCurrentProfile({ ...currentProfile, approved_level: json.profile.approved_level });
+      setJustApprovedLevel(json.profile.approved_level);
+      setShowLevelUpModal(false);
+      setLevelUpPin("");
+    } catch {
+      setApproveError("Couldn't reach the server");
+    } finally {
+      setApproving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4">
@@ -413,7 +456,12 @@ export default function BookshelfPage() {
             </p>
           )}
         </div>
-        <TreehouseProgressCard totalRead={totalRead} color={color} />
+        <TreehouseProgressCard
+          totalRead={totalRead}
+          approvedLevel={approvedLevel}
+          color={color}
+          onLevelUpClick={() => setShowLevelUpModal(true)}
+        />
       </div>
 
       {/* ── Empty state ── */}
@@ -933,6 +981,192 @@ export default function BookshelfPage() {
             >
               <Undo2 size={12} /> Undo
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Level-up parent approval modal ── */}
+      <AnimatePresence>
+        {showLevelUpModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-4"
+            style={{ background: "rgba(0,0,0,0.8)" }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowLevelUpModal(false);
+                setLevelUpPin("");
+                setApproveError(null);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0.28 }}
+              className="w-full max-w-sm rounded-3xl overflow-hidden"
+              style={{
+                background: "linear-gradient(145deg, #1E1008 0%, #150C04 100%)",
+                border: "1px solid rgba(255,215,0,0.2)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+            >
+              <div
+                className="px-6 pt-6 pb-4 text-center"
+                style={{
+                  background: "linear-gradient(180deg, rgba(255,200,0,0.12) 0%, transparent 100%)",
+                  borderBottom: "1px solid rgba(255,200,0,0.15)",
+                }}
+              >
+                <Lock size={28} color="#FFD700" className="mx-auto mb-2" />
+                <p className="text-xs font-black tracking-widest uppercase mb-1" style={{ color: "rgba(255,200,0,0.7)" }}>
+                  Ask a Grown-Up
+                </p>
+                <h2 className="text-xl font-black text-white leading-tight">
+                  {currentProfile?.name} is ready for Level {eligibleLevel}!
+                </h2>
+              </div>
+
+              <div className="px-6 py-5">
+                <p className="text-white/40 text-xs font-bold uppercase tracking-wide mb-2">
+                  Books read to get here
+                </p>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar mb-5 pb-1">
+                  {qualifyingBooks.map((b) => (
+                    <div key={b.id} className="flex-shrink-0 w-14 text-center">
+                      <div
+                        className="w-14 h-20 rounded-lg overflow-hidden mb-1 bg-amber-900/40 flex items-center justify-center text-xl"
+                        style={{ border: "1px solid rgba(255,215,0,0.15)" }}
+                      >
+                        {b.cover_url ? (
+                          <Image src={b.cover_url} alt={b.title} width={56} height={80} className="object-cover w-full h-full" unoptimized />
+                        ) : "📖"}
+                      </div>
+                      <p className="text-[8px] text-white/40 font-semibold line-clamp-2 leading-tight">{b.title}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-white/40 text-xs font-bold uppercase tracking-wide mb-2">
+                  Parent PIN
+                </p>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoFocus
+                  value={levelUpPin}
+                  onChange={(e) => { setLevelUpPin(e.target.value); setApproveError(null); }}
+                  onKeyDown={(e) => e.key === "Enter" && approveLevel()}
+                  className="w-full px-4 py-3 rounded-xl text-white font-bold text-base mb-2 outline-none tracking-widest"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+                  placeholder="••••"
+                />
+                {approveError && (
+                  <p className="text-xs font-bold mb-3" style={{ color: "#FF6B6B" }}>{approveError}</p>
+                )}
+
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => { setShowLevelUpModal(false); setLevelUpPin(""); setApproveError(null); }}
+                    className="flex-1 py-3 rounded-xl font-bold text-sm text-white/50"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                  >
+                    Not yet
+                  </button>
+                  <button
+                    onClick={approveLevel}
+                    disabled={approving || !levelUpPin}
+                    className="flex-1 py-3 rounded-xl font-black text-sm text-black disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)" }}
+                  >
+                    {approving ? "Checking…" : "Approve"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Level approved celebration ── */}
+      <AnimatePresence>
+        {justApprovedLevel != null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-6"
+            style={{ background: "rgba(0,0,0,0.85)" }}
+          >
+            {["⭐", "🌟", "✨", "⭐", "🌟"].map((star, i) => (
+              <motion.span
+                key={i}
+                className="fixed text-2xl pointer-events-none"
+                initial={{ opacity: 0, y: 0, x: 0, scale: 0 }}
+                animate={{
+                  opacity: [0, 1, 1, 0],
+                  y: -120 - i * 30,
+                  x: (i - 2) * 60,
+                  scale: [0, 1.4, 1, 0],
+                }}
+                transition={{ delay: 0.3 + i * 0.1, duration: 1.4 }}
+                style={{ left: "50%", bottom: "45%" }}
+              >
+                {star}
+              </motion.span>
+            ))}
+
+            <motion.div
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0.35, delay: 0.1 }}
+              className="w-full max-w-sm rounded-3xl overflow-hidden"
+              style={{
+                background: "linear-gradient(145deg, #0a0500 0%, #1a0c00 50%, #0a0500 100%)",
+                border: "2px solid rgba(255,210,0,0.4)",
+                boxShadow: "0 0 60px rgba(255,200,0,0.25), 0 30px 80px rgba(0,0,0,0.9)",
+              }}
+            >
+              <div
+                className="px-6 pt-7 pb-4 text-center"
+                style={{
+                  background: "linear-gradient(180deg, rgba(255,200,0,0.12) 0%, transparent 100%)",
+                  borderBottom: "1px solid rgba(255,200,0,0.15)",
+                }}
+              >
+                <motion.div
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  className="mb-3 flex justify-center"
+                >
+                  <Trophy size={48} color="#FFD700" />
+                </motion.div>
+                <p className="text-xs font-black tracking-widest uppercase mb-1" style={{ color: "rgba(255,200,0,0.6)" }}>
+                  Level Up!
+                </p>
+                <h2 className="text-2xl font-black text-white leading-tight">
+                  Level {justApprovedLevel} Unlocked
+                </h2>
+              </div>
+
+              <div className="px-6 py-5">
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => setJustApprovedLevel(null)}
+                  className="w-full py-4 rounded-2xl font-black text-lg text-black"
+                  style={{
+                    background: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)",
+                    boxShadow: "0 0 30px rgba(255,200,0,0.5), 0 8px 24px rgba(0,0,0,0.4)",
+                  }}
+                >
+                  Amazing! 🚀
+                </motion.button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -3,9 +3,12 @@
 -- Run this in Supabase Dashboard → SQL Editor
 -- ============================================================
 
--- If your tables already exist, just run this one line to add
--- the "currently reading" toggle column:
+-- If your tables already exist, just run these lines to add
+-- the "currently reading" toggle column and the parent-approved
+-- level (gamification — avatar upgrades unlock only once a parent
+-- reviews completed books and approves the level-up with a PIN):
 -- alter table reading_records add column if not exists currently_reading boolean default false;
+-- alter table profiles add column if not exists approved_level integer not null default 1;
 
 -- Profiles (kids)
 create table if not exists profiles (
@@ -13,6 +16,7 @@ create table if not exists profiles (
   name text not null,
   avatar text not null default '🦁',
   color text not null default '#FF6B6B',
+  approved_level integer not null default 1,
   created_at timestamptz default now()
 );
 

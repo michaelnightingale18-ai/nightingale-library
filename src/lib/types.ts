@@ -3,6 +3,7 @@ export interface Profile {
   name: string;
   avatar: string; // emoji
   color: string; // hex color for their theme
+  approved_level: number; // parent-approved level — gates avatar upgrades
   created_at: string;
 }
 

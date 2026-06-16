@@ -2,19 +2,34 @@
 import { motion } from "framer-motion";
 import { WoodCard } from "@/components/ui/WoodCard";
 import { Progress } from "@/components/ui/Progress";
-import { gold, levelFor } from "@/lib/theme";
+import { gold, levelFor, BOOKS_PER_LEVEL } from "@/lib/theme";
 
 /**
  * TreehouseProgressCard — gamification widget, top-right of bookshelf.
  * Level calculation comes from theme.levelFor() — change the formula there.
+ *
+ * The displayed level is the parent-approved level, not the raw book count.
+ * Once a kid reads enough books to qualify for the next level, the bar fills
+ * and stays full — a parent has to review and approve before it actually
+ * advances (see the approve-level API route).
  */
 interface Props {
-  totalRead: number;
-  color:     string;
+  totalRead:     number;
+  approvedLevel: number;
+  color:         string;
+  onLevelUpClick?: () => void;
 }
 
-export function TreehouseProgressCard({ totalRead, color }: Props) {
-  const { level, progress, toNext, fraction } = levelFor(totalRead);
+export function TreehouseProgressCard({ totalRead, approvedLevel, color, onLevelUpClick }: Props) {
+  const eligibleLevel = levelFor(totalRead).level;
+  const pending = eligibleLevel > approvedLevel;
+
+  const progressInBand = Math.min(
+    BOOKS_PER_LEVEL,
+    Math.max(0, totalRead - (approvedLevel - 1) * BOOKS_PER_LEVEL)
+  );
+  const toNext   = BOOKS_PER_LEVEL - progressInBand;
+  const fraction = pending ? 1 : progressInBand / BOOKS_PER_LEVEL;
 
   return (
     <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
@@ -46,7 +61,7 @@ export function TreehouseProgressCard({ totalRead, color }: Props) {
                 <p className="text-[9px] text-amber-400/60 font-bold uppercase tracking-widest leading-none mb-0.5">
                   Treehouse
                 </p>
-                <p className="text-base font-black text-amber-100 leading-none">Level {level}</p>
+                <p className="text-base font-black text-amber-100 leading-none">Level {approvedLevel}</p>
               </div>
             </div>
             <div
@@ -56,20 +71,33 @@ export function TreehouseProgressCard({ totalRead, color }: Props) {
                 border: `1px solid ${gold.dimBorder}`,
               }}
             >
-              <span className="text-amber-300 text-sm font-black">{level}</span>
+              <span className="text-amber-300 text-sm font-black">{approvedLevel}</span>
             </div>
           </div>
 
-          <Progress value={fraction} color={color} delay={0.3} />
+          <Progress value={fraction} color={pending ? "#FFD700" : color} delay={0.3} />
 
-          <div className="flex justify-between items-baseline">
-            <p className="text-[9px] text-white/35 font-medium">
-              {toNext} more until Level {level + 1}!
-            </p>
-            <p className="text-[9px] font-bold text-amber-400/60">
-              {progress}/{5}
-            </p>
-          </div>
+          {pending ? (
+            <motion.button
+              onClick={onLevelUpClick}
+              whileTap={{ scale: 0.96 }}
+              animate={{ opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 1.6, repeat: Infinity }}
+              className="w-full text-center text-[10px] font-black uppercase tracking-wide py-1 rounded-lg"
+              style={{ color: "#FFD700" }}
+            >
+              ✨ Level Up Ready! Tap here
+            </motion.button>
+          ) : (
+            <div className="flex justify-between items-baseline">
+              <p className="text-[9px] text-white/35 font-medium">
+                {toNext} more until Level {approvedLevel + 1}!
+              </p>
+              <p className="text-[9px] font-bold text-amber-400/60">
+                {progressInBand}/{BOOKS_PER_LEVEL}
+              </p>
+            </div>
+          )}
         </div>
       </WoodCard>
     </motion.div>
