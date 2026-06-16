@@ -8,20 +8,9 @@ import { SeriesTitleCard } from "./SeriesTitleCard";
 import type { BookState } from "@/lib/theme";
 import type { SeriesGroup, BookWithRecord } from "@/lib/types";
 
-/**
- * State derivation — business logic that belongs in this layer.
- * The first unread book in a series that already has completed books
- * is considered "reading". All others are "unread" or "completed".
- */
-export function stateOf(book: BookWithRecord, group: SeriesGroup): BookState {
+export function stateOf(book: BookWithRecord): BookState {
   if (book.liked) return "completed";
-  const hasCompleted = group.books.some((b) => b.liked);
-  if (hasCompleted) {
-    const firstUnread = [...group.books]
-      .sort((a, b) => (a.series_position ?? 0) - (b.series_position ?? 0))
-      .find((b) => !b.liked);
-    if (firstUnread?.id === book.id) return "reading";
-  }
+  if (book.currently_reading) return "reading";
   return "unread";
 }
 
@@ -91,7 +80,7 @@ export function SeriesShelfRow({ group, onBookClick, onTitleClick }: Props) {
                   key={book.id}
                   book={book}
                   containerId={group.series_name}
-                  state={stateOf(book, group)}
+                  state={stateOf(book)}
                   onClick={onBookClick}
                 />
               ))}

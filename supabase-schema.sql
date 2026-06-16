@@ -3,6 +3,10 @@
 -- Run this in Supabase Dashboard → SQL Editor
 -- ============================================================
 
+-- If your tables already exist, just run this one line to add
+-- the "currently reading" toggle column:
+-- alter table reading_records add column if not exists currently_reading boolean default false;
+
 -- Profiles (kids)
 create table if not exists profiles (
   id uuid primary key default gen_random_uuid(),
@@ -35,6 +39,7 @@ create table if not exists reading_records (
   book_id uuid not null references books(id) on delete cascade,
   read_at timestamptz default now(),
   liked boolean default true,
+  currently_reading boolean default false,
   unique(profile_id, book_id)
 );
 

@@ -21,7 +21,7 @@ export default function SeriesPage() {
     const [recordsRes, alertsRes] = await Promise.all([
       supabase
         .from("reading_records")
-        .select("id, book_id, liked, read_at, book:books(*)")
+        .select("id, book_id, liked, read_at, currently_reading, book:books(*)")
         .eq("profile_id", profileId)
         .order("read_at", { ascending: false }),
       supabase

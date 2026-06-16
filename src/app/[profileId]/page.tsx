@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles } from "lucide-react";
+import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles, BookOpen } from "lucide-react";
 import {
   DndContext, DragOverlay, closestCenter,
   PointerSensor, useSensor, useSensors,
@@ -46,14 +46,15 @@ export default function BookshelfPage() {
   const loadBooks = useCallback(async () => {
     const { data } = await supabase
       .from("reading_records")
-      .select("id, book_id, liked, read_at, book:books(*)")
+      .select("id, book_id, liked, read_at, currently_reading, book:books(*)")
       .eq("profile_id", profileId)
       .order("read_at", { ascending: true });
 
     if (data) {
       const records = (data as unknown) as {
         id: string; book_id: string; liked: boolean;
-        read_at: string; book: import("@/lib/types").Book;
+        read_at: string; currently_reading?: boolean;
+        book: import("@/lib/types").Book;
       }[];
       setGroups(groupBySeries(records));
     }
@@ -82,7 +83,7 @@ export default function BookshelfPage() {
     setMarkingRead(true);
     await supabase
       .from("reading_records")
-      .update({ liked: true, read_at: new Date().toISOString() })
+      .update({ liked: true, read_at: new Date().toISOString(), currently_reading: false })
       .eq("profile_id", profileId)
       .eq("book_id", book.id);
 
@@ -90,13 +91,32 @@ export default function BookshelfPage() {
       prev.map((g) => ({
         ...g,
         books: g.books.map((b) =>
-          b.id === book.id ? { ...b, liked: true, read_at: new Date().toISOString() } : b
+          b.id === book.id
+            ? { ...b, liked: true, read_at: new Date().toISOString(), currently_reading: false }
+            : b
         ),
       }))
     );
     setSelectedBook(null);
     setMarkingRead(false);
     showCelebration({ ...book, liked: true } as import("@/lib/types").Book);
+  }
+
+  async function toggleCurrentlyReading(book: BookWithRecord) {
+    const next = !book.currently_reading;
+    await supabase
+      .from("reading_records")
+      .update({ currently_reading: next })
+      .eq("profile_id", profileId)
+      .eq("book_id", book.id);
+
+    setGroups((prev) =>
+      prev.map((g) => ({
+        ...g,
+        books: g.books.map((b) => (b.id === book.id ? { ...b, currently_reading: next } : b)),
+      }))
+    );
+    setSelectedBook((prev) => (prev && prev.id === book.id ? { ...prev, currently_reading: next } : prev));
   }
 
   async function removeSeries(seriesName: string) {
@@ -454,10 +474,7 @@ export default function BookshelfPage() {
                   title={activeBook.title}
                   coverUrl={activeBook.cover_url}
                   position={activeBook.series_position}
-                  state={(() => {
-                    const g = groups.find((grp) => grp.books.some((b) => b.id === activeBook.id));
-                    return g ? stateOf(activeBook, g) : "unread";
-                  })()}
+                  state={stateOf(activeBook)}
                 />
               </div>
             )}
@@ -689,18 +706,34 @@ export default function BookshelfPage() {
                   <p className="text-white/30 text-xs font-medium mt-2">
                     {selectedBook.liked ? "✓ Read" : "Not read yet"}
                   </p>
-                  <Link
-                    href={`/${profileId}/add?author=${encodeURIComponent(selectedBook.author)}`}
-                    className="inline-flex items-center gap-1 mt-3 text-xs font-bold px-3 py-1.5 rounded-full transition-all active:scale-95"
-                    style={{
-                      background: "rgba(243,199,91,0.10)",
-                      border: "1px solid rgba(243,199,91,0.30)",
-                      color: "#F3C75B",
-                    }}
-                    onClick={() => setSelectedBook(null)}
-                  >
-                    More by {selectedBook.author} →
-                  </Link>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {!selectedBook.liked && (
+                      <button
+                        onClick={() => toggleCurrentlyReading(selectedBook)}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all active:scale-95"
+                        style={{
+                          background: selectedBook.currently_reading ? "rgba(255,200,0,0.18)" : "rgba(255,255,255,0.06)",
+                          border: `1px solid ${selectedBook.currently_reading ? "rgba(255,200,0,0.5)" : "rgba(255,255,255,0.15)"}`,
+                          color: selectedBook.currently_reading ? "#FFD700" : "rgba(255,255,255,0.5)",
+                        }}
+                      >
+                        <BookOpen size={12} />
+                        {selectedBook.currently_reading ? "Currently Reading" : "Mark as Currently Reading"}
+                      </button>
+                    )}
+                    <Link
+                      href={`/${profileId}/add?author=${encodeURIComponent(selectedBook.author)}`}
+                      className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full transition-all active:scale-95"
+                      style={{
+                        background: "rgba(243,199,91,0.10)",
+                        border: "1px solid rgba(243,199,91,0.30)",
+                        color: "#F3C75B",
+                      }}
+                      onClick={() => setSelectedBook(null)}
+                    >
+                      More by {selectedBook.author} →
+                    </Link>
+                  </div>
                 </div>
               </div>
 

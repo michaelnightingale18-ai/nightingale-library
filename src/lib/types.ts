@@ -27,6 +27,7 @@ export interface ReadingRecord {
   book_id: string;
   read_at: string;
   liked: boolean;
+  currently_reading?: boolean;
   book?: Book;
 }
 
@@ -34,6 +35,7 @@ export interface BookWithRecord extends Book {
   liked: boolean;
   read_at: string;
   record_id: string;
+  currently_reading?: boolean;
 }
 
 export interface SeriesGroup {

@@ -123,6 +123,7 @@ export function groupBySeries(
     book_id: string;
     liked: boolean;
     read_at: string;
+    currently_reading?: boolean;
     book: import("./types").Book;
   }[]
 ) {
@@ -135,6 +136,7 @@ export function groupBySeries(
         liked: boolean;
         read_at: string;
         record_id: string;
+        currently_reading?: boolean;
       })[];
       max_position: number;
       total_known: number;
@@ -161,6 +163,7 @@ export function groupBySeries(
       liked: record.liked,
       read_at: record.read_at,
       record_id: record.id,
+      currently_reading: record.currently_reading,
     });
 
     if (book.series_position && book.series_position > group.max_position) {
