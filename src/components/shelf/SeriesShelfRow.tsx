@@ -1,6 +1,8 @@
 "use client";
 import { useRef } from "react";
 import { ChevronRight } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { BookCoverCard } from "./BookCoverCard";
 import { SeriesTitleCard } from "./SeriesTitleCard";
 import type { BookState } from "@/lib/theme";
@@ -11,7 +13,7 @@ import type { SeriesGroup, BookWithRecord } from "@/lib/types";
  * The first unread book in a series that already has completed books
  * is considered "reading". All others are "unread" or "completed".
  */
-function stateOf(book: BookWithRecord, group: SeriesGroup): BookState {
+export function stateOf(book: BookWithRecord, group: SeriesGroup): BookState {
   if (book.liked) return "completed";
   const hasCompleted = group.books.some((b) => b.liked);
   if (hasCompleted) {
@@ -26,16 +28,25 @@ function stateOf(book: BookWithRecord, group: SeriesGroup): BookState {
 // Row height in px — tall enough for a reading book (138px) + stars (16px) + breathing room
 const ROW_H = 164;
 
+export function containerIdFor(seriesName: string) {
+  return `container::${seriesName}`;
+}
+
 interface Props {
   group:       SeriesGroup;
   onBookClick: (book: BookWithRecord) => void;
+  onTitleClick: (group: SeriesGroup) => void;
 }
 
-export function SeriesShelfRow({ group, onBookClick }: Props) {
-  // themeIndex removed: paletteFor() in SeriesTitleCard derives colour from the series name
+export function SeriesShelfRow({ group, onBookClick, onTitleClick }: Props) {
   const scrollRef  = useRef<HTMLDivElement>(null);
   const isOneOff   = group.series_name === "One-offs";
   const readCount  = group.books.filter((b) => b.liked).length;
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: containerIdFor(group.series_name),
+    data: { containerId: group.series_name, isContainer: true },
+  });
 
   return (
     <div className="flex flex-col">
@@ -49,31 +60,43 @@ export function SeriesShelfRow({ group, onBookClick }: Props) {
             </span>
           </div>
         ) : (
-          <SeriesTitleCard
-            name={group.series_name}
-            author={group.author}
-            bookCount={group.books.length}
-            readCount={readCount}
-            height={ROW_H}
-          />
+          <button onClick={() => onTitleClick(group)} className="text-left">
+            <SeriesTitleCard
+              name={group.series_name}
+              author={group.author}
+              bookCount={group.books.length}
+              readCount={readCount}
+              height={ROW_H}
+            />
+          </button>
         )}
 
-        {/* Horizontally scrollable books */}
+        {/* Horizontally scrollable + droppable books row */}
         <div
-          ref={scrollRef}
-          className="flex-1 overflow-x-auto no-scrollbar relative"
-          style={{ height: ROW_H }}
+          ref={(el) => { scrollRef.current = el; setNodeRef(el); }}
+          className="flex-1 overflow-x-auto no-scrollbar relative transition-all duration-150 rounded-xl"
+          style={{
+            height: ROW_H,
+            background: isOver ? "rgba(243,199,91,0.08)" : "transparent",
+            outline: isOver ? "2px dashed rgba(243,199,91,0.4)" : "none",
+          }}
         >
-          <div className="flex gap-3 items-end h-full pr-6" style={{ minWidth: "max-content" }}>
-            {group.books.map((book) => (
-              <BookCoverCard
-                key={book.id}
-                book={book}
-                state={stateOf(book, group)}
-                onClick={onBookClick}
-              />
-            ))}
-          </div>
+          <SortableContext
+            items={group.books.map((b) => b.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="flex gap-3 items-end h-full pr-6" style={{ minWidth: "max-content" }}>
+              {group.books.map((book) => (
+                <BookCoverCard
+                  key={book.id}
+                  book={book}
+                  containerId={group.series_name}
+                  state={stateOf(book, group)}
+                  onClick={onBookClick}
+                />
+              ))}
+            </div>
+          </SortableContext>
 
           {/* Fade + scroll hint */}
           {group.books.length > 5 && (

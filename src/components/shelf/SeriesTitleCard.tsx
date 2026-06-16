@@ -1,4 +1,5 @@
 "use client";
+import { Pencil } from "lucide-react";
 import { paletteFor, gold } from "@/lib/theme";
 
 interface Props {
@@ -78,6 +79,14 @@ export function SeriesTitleCard({ name, bookCount, readCount, height = 140 }: Pr
         className="absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl pointer-events-none"
         style={{ background: `${p.accent}28` }}
       />
+
+      {/* Rename hint */}
+      <div
+        aria-hidden
+        className="absolute top-2 right-2 z-10 opacity-50"
+      >
+        <Pencil size={10} color={p.accent} />
+      </div>
 
       {/* Subtle top shimmer line */}
       <div

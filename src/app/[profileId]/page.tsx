@@ -1,14 +1,21 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Plus, SlidersHorizontal, X, Star } from "lucide-react";
+import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles } from "lucide-react";
+import {
+  DndContext, DragOverlay, closestCenter,
+  PointerSensor, useSensor, useSensors,
+  type DragStartEvent, type DragEndEvent,
+} from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { groupBySeries } from "@/lib/books";
-import { SeriesShelfRow } from "@/components/shelf/SeriesShelfRow";
+import { Book } from "@/components/ui/Book";
+import { SeriesShelfRow, stateOf } from "@/components/shelf/SeriesShelfRow";
 import { TreehouseProgressCard } from "@/components/shelf/TreehouseProgressCard";
 import { NightyHelper } from "@/components/shelf/NightyHelper";
 import type { BookWithRecord, SeriesGroup, ReleaseAlert } from "@/lib/types";
@@ -24,6 +31,17 @@ export default function BookshelfPage() {
   const [selectedBook, setSelectedBook] = useState<BookWithRecord | null>(null);
   const [markingRead, setMarkingRead] = useState(false);
   const [newBookAlert, setNewBookAlert] = useState<ReleaseAlert | null>(null);
+
+  // Drag-and-drop state
+  const [activeBook, setActiveBook] = useState<BookWithRecord | null>(null);
+  const [renameModal, setRenameModal] = useState<{ seriesName: string; value: string } | null>(null);
+  const [newSeriesModal, setNewSeriesModal] = useState<{ bookIdA: string; bookIdB: string; value: string } | null>(null);
+  const [undoToast, setUndoToast] = useState<{ message: string; revert: () => Promise<void> } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const loadBooks = useCallback(async () => {
     const { data } = await supabase
@@ -134,6 +152,207 @@ export default function BookshelfPage() {
     setMarkingRead(false);
   }
 
+  function showUndo(message: string, revert: () => Promise<void>) {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast({ message, revert });
+    undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+  }
+
+  async function handleUndo() {
+    if (!undoToast) return;
+    const { revert } = undoToast;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast(null);
+    await revert();
+  }
+
+  function findBookAndGroup(bookId: string) {
+    for (const g of groups) {
+      const book = g.books.find((b) => b.id === bookId);
+      if (book) return { book, group: g };
+    }
+    return null;
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const found = findBookAndGroup(event.active.id as string);
+    setActiveBook(found?.book ?? null);
+  }
+
+  async function reorderWithinGroup(group: SeriesGroup, activeId: string, overId: string) {
+    const oldIndex = group.books.findIndex((b) => b.id === activeId);
+    const newIndex = group.books.findIndex((b) => b.id === overId);
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    const snapshot = group.books.map((b) => ({ id: b.id, series_position: b.series_position }));
+    const reordered = arrayMove(group.books, oldIndex, newIndex).map((b, i) => ({
+      ...b, series_position: i + 1,
+    }));
+
+    setGroups((prev) =>
+      prev.map((g) => (g.series_name === group.series_name ? { ...g, books: reordered } : g))
+    );
+
+    await Promise.all(
+      reordered.map((b, i) => supabase.from("books").update({ series_position: i + 1 }).eq("id", b.id))
+    );
+
+    showUndo(`Reordered ${group.series_name}`, async () => {
+      await Promise.all(
+        snapshot.map((s) => supabase.from("books").update({ series_position: s.series_position }).eq("id", s.id))
+      );
+      await loadBooks();
+    });
+  }
+
+  async function moveBookToGroup(bookId: string, destGroup: SeriesGroup) {
+    const found = findBookAndGroup(bookId);
+    if (!found) return;
+    const { book, group: sourceGroup } = found;
+    if (sourceGroup.series_name === destGroup.series_name) return;
+
+    const isDestOneOff = destGroup.series_name === "One-offs";
+    const newSeriesName = isDestOneOff ? null : destGroup.series_name;
+    const newPosition = isDestOneOff ? null : destGroup.books.length + 1;
+    const snapshot = { series_name: book.series_name, series_position: book.series_position };
+
+    setGroups((prev) => {
+      const updatedBook: BookWithRecord = { ...book, series_name: newSeriesName, series_position: newPosition };
+      let next = prev
+        .map((g) => (g.series_name === sourceGroup.series_name
+          ? { ...g, books: g.books.filter((b) => b.id !== bookId) }
+          : g))
+        .filter((g) => g.books.length > 0 || g.series_name === destGroup.series_name);
+
+      const destIdx = next.findIndex((g) => g.series_name === destGroup.series_name);
+      if (destIdx >= 0) {
+        next = next.map((g, i) => (i === destIdx ? { ...g, books: [...g.books, updatedBook] } : g));
+      } else {
+        next = [...next, { ...destGroup, books: [updatedBook] }];
+      }
+      return next;
+    });
+
+    await supabase
+      .from("books")
+      .update({ series_name: newSeriesName, series_position: newPosition })
+      .eq("id", bookId);
+
+    showUndo(`Moved "${book.title}" to ${destGroup.series_name}`, async () => {
+      await supabase
+        .from("books")
+        .update({ series_name: snapshot.series_name, series_position: snapshot.series_position })
+        .eq("id", bookId);
+      await loadBooks();
+    });
+  }
+
+  function openMergePrompt(bookIdA: string, bookIdB: string) {
+    setNewSeriesModal({ bookIdA, bookIdB, value: "" });
+  }
+
+  async function confirmNewSeries() {
+    if (!newSeriesModal) return;
+    const { bookIdA, bookIdB, value } = newSeriesModal;
+    const name = value.trim();
+    if (!name) return;
+
+    const oneOffs = groups.find((g) => g.series_name === "One-offs");
+    const bookA = oneOffs?.books.find((b) => b.id === bookIdA);
+    const bookB = oneOffs?.books.find((b) => b.id === bookIdB);
+    if (!bookA || !bookB) { setNewSeriesModal(null); return; }
+
+    setGroups((prev) => {
+      const newGroup: SeriesGroup = {
+        series_name: name,
+        author: bookA.author,
+        books: [
+          { ...bookA, series_name: name, series_position: 1 },
+          { ...bookB, series_name: name, series_position: 2 },
+        ],
+        max_position: 2,
+        total_known: 2,
+      };
+      const next = prev
+        .map((g) => (g.series_name === "One-offs"
+          ? { ...g, books: g.books.filter((b) => b.id !== bookIdA && b.id !== bookIdB) }
+          : g))
+        .filter((g) => g.series_name !== "One-offs" || g.books.length > 0);
+      return [...next, newGroup];
+    });
+
+    await supabase.from("books").update({ series_name: name, series_position: 1 }).eq("id", bookIdA);
+    await supabase.from("books").update({ series_name: name, series_position: 2 }).eq("id", bookIdB);
+
+    setNewSeriesModal(null);
+    showUndo(`Created series "${name}"`, async () => {
+      await supabase.from("books").update({ series_name: null, series_position: null }).eq("id", bookIdA);
+      await supabase.from("books").update({ series_name: null, series_position: null }).eq("id", bookIdB);
+      await loadBooks();
+    });
+  }
+
+  function openRename(group: SeriesGroup) {
+    setRenameModal({ seriesName: group.series_name, value: group.series_name });
+  }
+
+  async function confirmRename() {
+    if (!renameModal) return;
+    const { seriesName, value } = renameModal;
+    const newName = value.trim();
+    if (!newName || newName === seriesName) { setRenameModal(null); return; }
+
+    const group = groups.find((g) => g.series_name === seriesName);
+    if (!group) { setRenameModal(null); return; }
+
+    setGroups((prev) =>
+      prev.map((g) => (g.series_name === seriesName ? { ...g, series_name: newName } : g))
+    );
+
+    await Promise.all(
+      group.books.map((b) => supabase.from("books").update({ series_name: newName }).eq("id", b.id))
+    );
+
+    setRenameModal(null);
+    showUndo(`Renamed to "${newName}"`, async () => {
+      await Promise.all(
+        group.books.map((b) => supabase.from("books").update({ series_name: seriesName }).eq("id", b.id))
+      );
+      await loadBooks();
+    });
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveBook(null);
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    if (activeId === overId) return;
+
+    const activeContainerId = (active.data.current as { containerId?: string } | undefined)?.containerId;
+    const overData = over.data.current as { containerId?: string; isContainer?: boolean } | undefined;
+    const overContainerId = overData?.containerId;
+    const overIsContainer = !!overData?.isContainer;
+    if (!activeContainerId || !overContainerId) return;
+
+    const sourceGroup = groups.find((g) => g.series_name === activeContainerId);
+    const destGroup = groups.find((g) => g.series_name === overContainerId);
+    if (!sourceGroup || !destGroup) return;
+
+    if (activeContainerId === overContainerId) {
+      if (overIsContainer) return;
+      if (activeContainerId === "One-offs") {
+        openMergePrompt(activeId, overId);
+      } else {
+        reorderWithinGroup(sourceGroup, activeId, overId);
+      }
+      return;
+    }
+
+    moveBookToGroup(activeId, destGroup);
+  }
+
   const totalRead = groups.reduce((s, g) => s + g.books.filter((b) => b.liked).length, 0);
   const totalBooks = groups.reduce((s, g) => s + g.books.length, 0);
 
@@ -203,23 +422,47 @@ export default function BookshelfPage() {
 
       {/* ── Series shelf rows ── */}
       {groups.length > 0 && (
-        <div className="flex-1 overflow-y-auto no-scrollbar pb-4 space-y-5 pt-1">
-          {groups.map((group, idx) => (
-            <motion.div
-              key={group.series_name}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.07, duration: 0.4 }}
-            >
-              <SeriesShelfRow
-                group={group}
-                onBookClick={(book) => setSelectedBook(book)}
-              />
-            </motion.div>
-          ))}
-          {/* Bottom breathing room */}
-          <div className="h-4" />
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex-1 overflow-y-auto no-scrollbar pb-4 space-y-5 pt-1">
+            {groups.map((group, idx) => (
+              <motion.div
+                key={group.series_name}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.07, duration: 0.4 }}
+              >
+                <SeriesShelfRow
+                  group={group}
+                  onBookClick={(book) => setSelectedBook(book)}
+                  onTitleClick={openRename}
+                />
+              </motion.div>
+            ))}
+            {/* Bottom breathing room */}
+            <div className="h-4" />
+          </div>
+
+          <DragOverlay>
+            {activeBook && (
+              <div style={{ touchAction: "none" }}>
+                <Book
+                  title={activeBook.title}
+                  coverUrl={activeBook.cover_url}
+                  position={activeBook.series_position}
+                  state={(() => {
+                    const g = groups.find((grp) => grp.books.some((b) => b.id === activeBook.id));
+                    return g ? stateOf(activeBook, g) : "unread";
+                  })()}
+                />
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* ── Bottom action bar ── */}
@@ -514,6 +757,149 @@ export default function BookshelfPage() {
                 </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Rename series modal ── */}
+      <AnimatePresence>
+        {renameModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-6"
+            style={{ background: "rgba(0,0,0,0.75)" }}
+            onClick={(e) => e.target === e.currentTarget && setRenameModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0.28 }}
+              className="w-full max-w-sm rounded-3xl p-5"
+              style={{
+                background: "linear-gradient(145deg, #1E1008 0%, #150C04 100%)",
+                border: "1px solid rgba(255,215,0,0.12)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+            >
+              <p className="text-xs font-black tracking-widest uppercase mb-2" style={{ color: "#F3C75B" }}>
+                Rename Series
+              </p>
+              <input
+                autoFocus
+                value={renameModal.value}
+                onChange={(e) => setRenameModal({ ...renameModal, value: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && confirmRename()}
+                className="w-full px-4 py-3 rounded-xl text-white font-bold text-base mb-4 outline-none"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRenameModal(null)}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm text-white/50"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRename}
+                  className="flex-1 py-3 rounded-xl font-black text-sm text-white"
+                  style={{ background: "linear-gradient(135deg, #1e3a8a, #2563eb)" }}
+                >
+                  Save
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── New series naming modal (merging two one-offs) ── */}
+      <AnimatePresence>
+        {newSeriesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-6"
+            style={{ background: "rgba(0,0,0,0.75)" }}
+            onClick={(e) => e.target === e.currentTarget && setNewSeriesModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0.28 }}
+              className="w-full max-w-sm rounded-3xl p-5"
+              style={{
+                background: "linear-gradient(145deg, #1E1008 0%, #150C04 100%)",
+                border: "1px solid rgba(255,215,0,0.12)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={14} color="#F3C75B" />
+                <p className="text-xs font-black tracking-widest uppercase" style={{ color: "#F3C75B" }}>
+                  Start a New Series
+                </p>
+              </div>
+              <p className="text-white/40 text-xs mb-3">
+                What should we call this series?
+              </p>
+              <input
+                autoFocus
+                placeholder="Series name…"
+                value={newSeriesModal.value}
+                onChange={(e) => setNewSeriesModal({ ...newSeriesModal, value: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && confirmNewSeries()}
+                className="w-full px-4 py-3 rounded-xl text-white font-bold text-base mb-4 outline-none"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setNewSeriesModal(null)}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm text-white/50"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmNewSeries}
+                  className="flex-1 py-3 rounded-xl font-black text-sm text-white"
+                  style={{ background: "linear-gradient(135deg, #1e3a8a, #2563eb)" }}
+                >
+                  Create
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Undo toast ── */}
+      <AnimatePresence>
+        {undoToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl"
+            style={{
+              background: "rgba(20,12,4,0.95)",
+              border: "1px solid rgba(243,199,91,0.25)",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.6)",
+            }}
+          >
+            <p className="text-white/80 text-xs font-semibold whitespace-nowrap">{undoToast.message}</p>
+            <button
+              onClick={handleUndo}
+              className="flex items-center gap-1 text-xs font-black px-2 py-1 rounded-full"
+              style={{ color: "#F3C75B" }}
+            >
+              <Undo2 size={12} /> Undo
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
