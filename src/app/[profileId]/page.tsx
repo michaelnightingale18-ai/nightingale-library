@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles, BookOpen, Lock, Trophy } from "lucide-react";
+import { Plus, SlidersHorizontal, X, Star, Undo2, Sparkles, BookOpen, Lock, Trophy, Move } from "lucide-react";
 import {
   DndContext, DragOverlay, closestCenter,
   PointerSensor, useSensor, useSensors,
@@ -34,6 +34,7 @@ export default function BookshelfPage() {
   const [newBookAlert, setNewBookAlert] = useState<ReleaseAlert | null>(null);
 
   // Drag-and-drop state
+  const [arrangeMode, setArrangeMode] = useState(false);
   const [activeBook, setActiveBook] = useState<BookWithRecord | null>(null);
   const [renameModal, setRenameModal] = useState<{ seriesName: string; value: string } | null>(null);
   const [newSeriesModal, setNewSeriesModal] = useState<{ bookIdA: string; bookIdB: string; value: string } | null>(null);
@@ -496,6 +497,29 @@ export default function BookshelfPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
+          <AnimatePresence>
+            {arrangeMode && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex-shrink-0 px-5 overflow-hidden"
+              >
+                <div
+                  className="flex items-center gap-2 px-3 py-2 mb-2 rounded-xl text-xs font-bold"
+                  style={{
+                    background: "rgba(255,200,0,0.10)",
+                    border: "1px solid rgba(255,200,0,0.3)",
+                    color: "#FFD700",
+                  }}
+                >
+                  <Move size={13} className="flex-shrink-0" />
+                  Drag books to rearrange them — tap &quot;Lock Shelves&quot; when you&apos;re done.
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="flex-1 overflow-y-auto no-scrollbar pb-4 space-y-5 pt-1">
             {groups.map((group, idx) => (
               <motion.div
@@ -506,6 +530,7 @@ export default function BookshelfPage() {
               >
                 <SeriesShelfRow
                   group={group}
+                  arrangeMode={arrangeMode}
                   onBookClick={(book) => setSelectedBook(book)}
                   onTitleClick={openRename}
                 />
@@ -539,15 +564,24 @@ export default function BookshelfPage() {
         }}
       >
         <button
+          onClick={() => setArrangeMode((v) => !v)}
           className="flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
-          style={{
-            background: "rgba(243,199,91,0.07)",
-            border: "1.5px solid rgba(243,199,91,0.28)",
-            color: "#F3C75B",
-          }}
+          style={
+            arrangeMode
+              ? {
+                  background: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)",
+                  border: "1.5px solid rgba(255,200,0,0.6)",
+                  color: "#1a0f00",
+                }
+              : {
+                  background: "rgba(243,199,91,0.07)",
+                  border: "1.5px solid rgba(243,199,91,0.28)",
+                  color: "#F3C75B",
+                }
+          }
         >
-          <SlidersHorizontal size={13} />
-          Collection
+          {arrangeMode ? <Lock size={13} /> : <Move size={13} />}
+          {arrangeMode ? "Lock Shelves" : "Rearrange"}
         </button>
 
         <Link

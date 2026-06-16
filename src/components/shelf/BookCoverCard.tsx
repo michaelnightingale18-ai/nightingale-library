@@ -14,13 +14,15 @@ interface Props {
   book:        BookWithRecord;
   containerId: string;
   state:       BookState;
+  arrangeMode: boolean;
   onClick?:    (book: BookWithRecord) => void;
 }
 
-export function BookCoverCard({ book, containerId, state, onClick }: Props) {
+export function BookCoverCard({ book, containerId, state, arrangeMode, onClick }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: book.id,
     data: { containerId },
+    disabled: !arrangeMode,
   });
 
   const style = {
@@ -37,7 +39,7 @@ export function BookCoverCard({ book, containerId, state, onClick }: Props) {
         coverUrl={book.cover_url}
         position={book.series_position}
         state={state}
-        onClick={onClick && !isDragging ? () => onClick(book) : undefined}
+        onClick={onClick && !isDragging && !arrangeMode ? () => onClick(book) : undefined}
       />
     </div>
   );

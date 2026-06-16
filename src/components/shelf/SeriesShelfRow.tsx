@@ -23,11 +23,12 @@ export function containerIdFor(seriesName: string) {
 
 interface Props {
   group:       SeriesGroup;
+  arrangeMode: boolean;
   onBookClick: (book: BookWithRecord) => void;
   onTitleClick: (group: SeriesGroup) => void;
 }
 
-export function SeriesShelfRow({ group, onBookClick, onTitleClick }: Props) {
+export function SeriesShelfRow({ group, arrangeMode, onBookClick, onTitleClick }: Props) {
   const scrollRef  = useRef<HTMLDivElement>(null);
   const isOneOff   = group.series_name === "One-offs";
   const readCount  = group.books.filter((b) => b.liked).length;
@@ -35,6 +36,7 @@ export function SeriesShelfRow({ group, onBookClick, onTitleClick }: Props) {
   const { setNodeRef, isOver } = useDroppable({
     id: containerIdFor(group.series_name),
     data: { containerId: group.series_name, isContainer: true },
+    disabled: !arrangeMode,
   });
 
   return (
@@ -81,6 +83,7 @@ export function SeriesShelfRow({ group, onBookClick, onTitleClick }: Props) {
                   book={book}
                   containerId={group.series_name}
                   state={stateOf(book)}
+                  arrangeMode={arrangeMode}
                   onClick={onBookClick}
                 />
               ))}
