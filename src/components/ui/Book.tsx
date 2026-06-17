@@ -3,13 +3,6 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { bookStates, coverColorFor, type BookState } from "@/lib/theme";
 
-/**
- * Book — atomic book card.
- *
- * Accepts semantic state ("unread" | "reading" | "completed").
- * All size, colour, and effect decisions come from theme.bookStates —
- * this component has no visual magic numbers of its own.
- */
 interface Props {
   title: string;
   coverUrl?: string | null;
@@ -26,41 +19,67 @@ export function Book({ title, coverUrl, position, state, onClick }: Props) {
     <motion.div
       className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer select-none"
       style={{ width: s.width }}
-      whileHover={{ y: state === "unread" ? -2 : -6 }}
+      initial={{ y: s.lift }}
+      animate={{ y: s.lift }}
+      whileHover={{ y: s.lift + (state === "unread" ? -2 : -6) }}
       transition={{ duration: 0.15 }}
       onClick={onClick}
     >
-      {/* ── Cover image ── */}
+      {/* Outer: overflow visible so the bookmark ribbon can poke above the top edge */}
       <div
-        className={`relative overflow-hidden transition-all duration-300${state === "reading" ? " book-reading-glow" : ""}`}
+        className={`relative transition-all duration-300${state === "reading" ? " book-reading-glow" : ""}`}
         style={{
           width:        s.width,
           height:       s.height,
-          borderRadius: "3px 7px 7px 3px",
           filter:       s.filter,
           boxShadow:    s.shadow,
+          borderRadius: "3px 7px 7px 3px",
           outline:      s.outline ? `1.5px solid ${s.outline}` : undefined,
-          transform:    s.lift ? `translateY(${s.lift}px)` : undefined,
+          overflow:     "visible",
         }}
       >
-        {coverUrl ? (
-          <Image src={coverUrl} alt={title} fill className="object-cover" unoptimized />
-        ) : (
-          <Fallback title={title} position={position} bg={fallbackBg} />
-        )}
+        {/* Inner: clips the cover image to the book shape */}
+        <div
+          className="absolute inset-0 overflow-hidden"
+          style={{ borderRadius: "3px 7px 7px 3px" }}
+        >
+          {coverUrl ? (
+            <Image src={coverUrl} alt={title} fill className="object-cover" unoptimized />
+          ) : (
+            <Fallback title={title} position={position} bg={fallbackBg} />
+          )}
+          {state === "completed" && <GoldShimmer />}
+          {state === "unread" && position != null && <UnreadNumber n={position} />}
+        </div>
 
-        {state === "reading"    && <ReadingBadge />}
-        {state === "completed"  && <GoldShimmer />}
-        {state === "unread" && position != null && <UnreadNumber n={position} />}
+        {/* Bookmark ribbon: sits above the book cover top edge */}
+        {state === "reading" && <BookmarkRibbon />}
       </div>
 
-      {/* ── Below-cover label ── */}
+      {/* Below-cover label */}
       <BelowLabel state={state} position={position} />
     </motion.div>
   );
 }
 
 // ── Sub-renderers ──────────────────────────────────────────────────────────
+
+function BookmarkRibbon() {
+  return (
+    <div
+      className="absolute z-20 pointer-events-none"
+      style={{
+        top:        -16,
+        right:      11,
+        width:      11,
+        height:     26,
+        background: "linear-gradient(180deg, #E8543A 0%, #C0392B 60%, #992B22 100%)",
+        clipPath:   "polygon(0 0, 100% 0, 100% 76%, 50% 100%, 0 76%)",
+        boxShadow:  "1px 1px 5px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.35)",
+      }}
+    />
+  );
+}
 
 function Fallback({ title, position, bg }: { title: string; position?: number | null; bg: string }) {
   return (
@@ -72,23 +91,6 @@ function Fallback({ title, position, bg }: { title: string; position?: number | 
       <span className="text-white/80 text-[8px] font-bold leading-tight text-center line-clamp-5 px-0.5">
         {title}
       </span>
-    </div>
-  );
-}
-
-function ReadingBadge() {
-  return (
-    <div className="absolute top-0 right-1.5 z-10">
-      <div
-        className="w-5 text-[5px] font-black text-amber-950 pt-1.5 pb-3 text-center leading-tight tracking-widest"
-        style={{
-          background: "linear-gradient(180deg, #FFD700 0%, #F59E0B 100%)",
-          clipPath: "polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%)",
-          boxShadow: "0 2px 10px rgba(255,180,0,0.55)",
-        }}
-      >
-        READ<br />ING
-      </div>
     </div>
   );
 }

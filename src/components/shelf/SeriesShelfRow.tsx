@@ -14,8 +14,8 @@ export function stateOf(book: BookWithRecord): BookState {
   return "unread";
 }
 
-// Row height in px — tall enough for a reading book (138px) + stars (16px) + breathing room
-const ROW_H = 164;
+// Row height in px — reading book (138px) + label (16px) + breathing room + 20px for bookmark ribbon
+const ROW_H = 184;
 
 export function containerIdFor(seriesName: string) {
   return `container::${seriesName}`;

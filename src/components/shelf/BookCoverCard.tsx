@@ -29,7 +29,7 @@ export function BookCoverCard({ book, containerId, state, arrangeMode, onClick }
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.35 : 1,
-    touchAction: "none" as const,
+    touchAction: arrangeMode ? ("none" as const) : ("auto" as const),
   };
 
   return (
